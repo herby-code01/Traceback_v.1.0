@@ -1,0 +1,16 @@
+[Unit]
+Description=Traceback control plane
+After=network-online.target docker.service
+Requires=docker.service
+
+[Service]
+User=traceback
+WorkingDirectory=/opt/traceback
+EnvironmentFile=/etc/traceback.env
+ExecStart=/opt/traceback/venv/bin/gunicorn -w 1 --threads 8 -b 127.0.0.1:8080 --timeout 120 app:app
+Restart=on-failure
+NoNewPrivileges=true
+PrivateTmp=false
+
+[Install]
+WantedBy=multi-user.target

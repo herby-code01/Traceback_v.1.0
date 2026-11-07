@@ -1,0 +1,263 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Traceback — reconstruct why software broke</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0f1114;--panel:#171a1f;--panel2:#1d2127;--line:#2a3038;--ink:#e8e6e1;--dim:#9aa1ab;--faint:#6b727c;
+  --amber:#f2b134;--amber-ink:#1a1305;--red:#ff6b5e;--green:#5ed49a;--blue:#7db4ff;
+  --mono:'IBM Plex Mono',ui-monospace,Menlo,Consolas,monospace;--sans:'IBM Plex Sans',system-ui,sans-serif;
+}
+:root[data-theme="light"]{--bg:#f4f2ec;--panel:#fff;--panel2:#f0ede5;--line:#d9d4c7;--ink:#1c1b18;--dim:#5b5a54;--faint:#8a877d;--amber:#b5740a;--amber-ink:#fff;--red:#c4382b;--green:#157a4c;--blue:#1f5fb8}
+@media (prefers-color-scheme: light){:root:not([data-theme="dark"]){--bg:#f4f2ec;--panel:#fff;--panel2:#f0ede5;--line:#d9d4c7;--ink:#1c1b18;--dim:#5b5a54;--faint:#8a877d;--amber:#b5740a;--amber-ink:#fff;--red:#c4382b;--green:#157a4c;--blue:#1f5fb8}}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--ink);font:15px/1.55 var(--sans)}
+header{display:flex;flex-wrap:wrap;gap:12px 24px;align-items:baseline;justify-content:space-between;padding:20px 24px;border-bottom:1px solid var(--line)}
+.brand{font:600 20px var(--mono);letter-spacing:.18em}
+.brand b{color:var(--amber)}
+.tag{color:var(--dim);font-size:14px}
+.chips{display:flex;gap:8px;flex-wrap:wrap}
+.chip{font:500 12px var(--mono);padding:3px 9px;border:1px solid var(--line);border-radius:99px;color:var(--dim)}
+.chip.ok{color:var(--green);border-color:color-mix(in srgb,var(--green) 40%,var(--line))}
+main{display:grid;grid-template-columns:340px 1fr;gap:20px;padding:20px 24px;max-width:1280px;margin:0 auto}
+@media(max-width:900px){main{grid-template-columns:1fr;padding:16px}}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:10px;padding:16px}
+h2{font:600 12px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint);margin:0 0 12px}
+label{display:block;font:500 12px var(--mono);color:var(--dim);margin:12px 0 4px}
+input[type=file]{width:100%;font:13px var(--mono);color:var(--dim);background:var(--panel2);border:1px dashed var(--line);border-radius:8px;padding:10px}
+textarea{width:100%;min-height:70px;background:var(--panel2);color:var(--ink);border:1px solid var(--line);border-radius:8px;padding:10px;font:14px var(--sans);resize:vertical}
+button{font:600 13px var(--mono);cursor:pointer;border-radius:8px;border:1px solid var(--line);background:var(--panel2);color:var(--ink);padding:10px 14px}
+button:hover{border-color:var(--amber)}
+button.primary{background:var(--amber);color:var(--amber-ink);border-color:var(--amber);width:100%;margin-top:14px}
+button:disabled{opacity:.5;cursor:wait}
+.demos{display:grid;gap:8px}
+.demos button{text-align:left}
+.demos small{display:block;font:400 12px var(--sans);color:var(--dim);margin-top:2px}
+hr{border:0;border-top:1px solid var(--line);margin:16px 0}
+.stack{display:grid;gap:16px;align-content:start}
+.steps{display:flex;gap:0;flex-wrap:wrap}
+.step{flex:1;min-width:120px;padding:10px 12px;border:1px solid var(--line);font:500 12px var(--mono);color:var(--faint)}
+.step:first-child{border-radius:8px 0 0 8px}.step:last-child{border-radius:0 8px 8px 0}
+.step.on{color:var(--amber);border-color:var(--amber);background:color-mix(in srgb,var(--amber) 10%,transparent)}
+.step.done{color:var(--green)}
+.empty{color:var(--dim);padding:28px 8px;text-align:center}
+.timeline{list-style:none;margin:0;padding:0 0 0 14px;border-left:2px solid var(--line)}
+.timeline li{position:relative;padding:0 0 14px 18px}
+.timeline li::before{content:"";position:absolute;left:-22px;top:6px;width:10px;height:10px;border-radius:50%;background:var(--line);border:2px solid var(--panel)}
+.timeline li.replay::before{background:var(--blue)}.timeline li.verdict::before{background:var(--amber)}
+.timeline li.blocked::before{background:var(--red)}.timeline li.model::before{background:#c79bff}
+.timeline li.pass::before{background:var(--green)}.timeline li.fail::before{background:var(--red)}
+.t{font:500 12px var(--mono);color:var(--faint)}
+.lbl{font-weight:500}
+.det{font:12.5px var(--mono);color:var(--dim);word-break:break-all}
+.det a{color:var(--blue);cursor:pointer;text-decoration:underline}
+.verdict{border-left:4px solid var(--amber)}
+.verdict.confirmed{border-left-color:var(--green)}
+.verdict.inconclusive,.verdict.NOT_CONTAINED{border-left-color:var(--red)}
+.verdict.contained{border-left-color:var(--green)}
+.vt{font:600 11px var(--mono);letter-spacing:.14em;text-transform:uppercase;color:var(--faint)}
+.vh{font:600 20px/1.3 var(--sans);margin:4px 0 8px}
+.badge{display:inline-block;font:600 11px var(--mono);padding:2px 8px;border-radius:99px;border:1px solid var(--line);margin-right:6px;color:var(--dim)}
+.badge.high{color:var(--green);border-color:var(--green)}.badge.medium{color:var(--amber);border-color:var(--amber)}.badge.low{color:var(--red);border-color:var(--red)}
+.ev{display:grid;grid-template-columns:140px 1fr;gap:4px 14px;padding:10px 0;border-top:1px solid var(--line)}
+.ev:first-of-type{border-top:0}
+.ev .k{font:500 12px var(--mono);color:var(--faint);text-transform:uppercase;letter-spacing:.08em;padding-top:2px}
+.ev code,.ev a{font:13px var(--mono);word-break:break-word}
+.ev a{color:var(--blue);cursor:pointer;text-decoration:underline}
+@media(max-width:600px){.ev{grid-template-columns:1fr}}
+pre{margin:0;background:var(--panel2);border:1px solid var(--line);border-radius:8px;padding:12px;overflow:auto;font:12.5px/1.5 var(--mono);max-height:340px}
+.add{color:var(--green)}.del{color:var(--red)}.hl{background:color-mix(in srgb,var(--amber) 22%,transparent);display:block}
+.ln{color:var(--faint);user-select:none;display:inline-block;width:3ch;margin-right:1.5ch;text-align:right}
+table{width:100%;border-collapse:collapse;font:13px var(--mono)}
+td,th{text-align:left;padding:7px 8px;border-top:1px solid var(--line);vertical-align:top}
+th{color:var(--faint);font-weight:500;font-size:11px;text-transform:uppercase;letter-spacing:.08em;border-top:0}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 16px;font:13px var(--mono)}
+.kv span:nth-child(odd){color:var(--faint)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:10px}
+.caveat{color:var(--dim);font-size:13px;margin:6px 0 0}
+dialog{background:var(--panel);color:var(--ink);border:1px solid var(--line);border-radius:10px;width:min(860px,94vw);padding:0}
+dialog::backdrop{background:#000a}
+.dh{display:flex;justify-content:space-between;align-items:center;padding:12px 16px;border-bottom:1px solid var(--line);font:600 13px var(--mono)}
+.err{color:var(--red);font:13px var(--mono)}
+.pill{font:600 11px var(--mono);padding:1px 7px;border-radius:4px}
+.pill.y{background:color-mix(in srgb,var(--green) 20%,transparent);color:var(--green)}
+.pill.n{background:color-mix(in srgb,var(--red) 18%,transparent);color:var(--red)}
+</style>
+</head>
+<body>
+<header>
+  <div><div class="brand">TRACE<b>BACK</b></div><div class="tag">When software breaks, reconstruct the why.</div></div>
+  <div class="chips" id="chips"></div>
+</header>
+<main>
+  <aside class="stack">
+    <section class="card">
+      <h2>Case file</h2>
+      <form id="form">
+        <label for="before">BEFORE snapshot (.zip, worked)</label>
+        <input type="file" id="before" accept=".zip" required>
+        <label for="after">AFTER snapshot (.zip, broken)</label>
+        <input type="file" id="after" accept=".zip" required>
+        <label for="log">Log file (optional)</label>
+        <input type="file" id="log">
+        <label for="q">Question</label>
+        <textarea id="q">The app worked yesterday. Why does it fail now?</textarea>
+        <button class="primary" id="go">Investigate</button>
+      </form>
+    </section>
+    <section class="card">
+      <h2>Bundled cases</h2>
+      <div class="demos">
+        <button data-demo="known-bug">Known cause: config rename<small>Env var renamed, three unrelated changes as noise</small></button>
+        <button data-demo="inconclusive">Inconclusive<small>Fails before and after: Traceback should refuse to blame the diff</small></button>
+        <button data-demo="containment">Containment demo<small>Hostile script tries to escape the sandbox</small></button>
+      </div>
+      <p class="caveat">Download the sample ZIPs to try your own upload:
+        <a style="color:var(--blue)" href="/api/fixtures/known-bug/before.zip">before</a> ·
+        <a style="color:var(--blue)" href="/api/fixtures/known-bug/after.zip">after</a></p>
+    </section>
+  </aside>
+
+  <section class="stack" id="out">
+    <div class="card empty">Upload two snapshots, or load a bundled case, to open an investigation.</div>
+  </section>
+</main>
+
+<dialog id="viewer"><div class="dh"><span id="vtitle"></span><button id="vclose">Close</button></div><pre id="vbody" style="border:0;max-height:70vh"></pre></dialog>
+
+<script>
+const $=s=>document.querySelector(s);
+function h(tag,attrs={},...kids){const e=document.createElement(tag);for(const[k,v]of Object.entries(attrs)){if(k==='class')e.className=v;else if(k.startsWith('on'))e[k]=v;else e.setAttribute(k,v)}
+  for(const c of kids.flat())if(c!=null)e.append(c.nodeType?c:document.createTextNode(c));return e}
+let current=null,timer=null;
+
+async function health(){try{const r=await (await fetch('/api/health')).json();
+  $('#chips').replaceChildren(h('span',{class:'chip ok'},'sandbox: '+r.driver),
+    h('span',{class:'chip '+(r.model_enabled?'ok':'')},r.model_enabled?('Vultr inference: '+r.model):'inference: offline fallback'))}catch(e){}}
+health();
+
+async function start(promise){
+  clearInterval(timer);current=null;
+  document.querySelectorAll('button').forEach(b=>b.disabled=true);
+  $('#out').replaceChildren(h('div',{class:'card empty'},'Opening investigation…'));
+  try{const r=await promise;const j=await r.json();if(!r.ok)throw new Error(j.error||r.statusText);
+    current=j.id;poll();timer=setInterval(poll,700)}
+  catch(e){$('#out').replaceChildren(h('div',{class:'card err'},String(e.message)));unlock()}
+}
+const unlock=()=>document.querySelectorAll('button').forEach(b=>b.disabled=false);
+
+$('#form').onsubmit=e=>{e.preventDefault();const f=new FormData();
+  f.append('before',$('#before').files[0]);f.append('after',$('#after').files[0]);
+  if($('#log').files[0])f.append('log',$('#log').files[0]);f.append('question',$('#q').value);
+  start(fetch('/api/runs',{method:'POST',body:f}))};
+document.querySelectorAll('[data-demo]').forEach(b=>b.onclick=()=>start(fetch('/api/demo/'+b.dataset.demo,{method:'POST'})));
+
+async function poll(){
+  if(!current)return;
+  const j=await (await fetch('/api/runs/'+current)).json();
+  render(j);
+  if(j.status!=='running'){clearInterval(timer);unlock()}
+}
+
+function stageOf(events,done){
+  const kinds=new Set(events.map(e=>e.kind));
+  const idx=[kinds.has('compare'),kinds.has('replay'),kinds.has('replay')&&events.filter(e=>e.kind==='replay').length>2,kinds.has('verdict')];
+  return idx.map((on,i)=>done?'done':(on?(i===idx.lastIndexOf(true)?'on':'done'):''));
+}
+
+function timeline(events){
+  return h('ol',{class:'timeline'},events.map(e=>{
+    let cls=e.kind;if(e.kind==='replay')cls+=/PASSES|passes/.test(e.label)?' pass':(/FAILS|still fails/.test(e.label)?' fail':'');
+    const det=h('div',{class:'det'},e.detail||'');
+    if(e.ref&&e.ref.path)det.append(' ',h('a',{onclick:()=>openFile(e.ref)},'open source'));
+    return h('li',{class:cls},h('span',{class:'t'},e.t),' ',h('span',{class:'lbl'},e.label),det)}));
+}
+
+function render(j){
+  const out=[];
+  const done=j.status!=='running';
+  if(j.kind==='investigation'){
+    const st=stageOf(j.events,done&&!j.error);
+    out.push(h('div',{class:'steps'},['Compare','Replay','Connect','Prove'].map((s,i)=>h('div',{class:'step '+st[i]},(st[i]==='done'?'✓ ':'0'+(i+1)+' ')+s))));
+  }
+  if(j.error)out.push(h('div',{class:'card err'},j.error));
+  const r=j.report;
+  if(r&&j.kind==='investigation')out.push(verdictCard(r));
+  if(r&&j.kind==='containment')out.push(containmentCard(r));
+  out.push(h('section',{class:'card'},h('h2',{},'Evidence timeline'),timeline(r&&r.events?r.events:j.events)));
+  if(r&&j.kind==='investigation'){out.push(candidatesCard(r));out.push(sandboxCard(r.sandbox,r.model))}
+  if(r&&j.kind==='containment')out.push(sandboxCard({driver:r.sandbox.driver,limits:r.sandbox.limits,runs:2,all_workspaces_destroyed:r.sandbox.teardown.workspace_removed,violations_total:r.violations.length},null),outputCard(r));
+  $('#out').replaceChildren(...out);
+}
+
+function verdictCard(r){
+  const f=r.finding,box=h('section',{class:'card verdict '+r.verdict});
+  box.append(h('div',{class:'vt'},'Verdict · '+r.verdict.replace(/_/g,' ')),h('div',{class:'vh'},f.title),
+    h('div',{},h('span',{class:'badge '+f.confidence},'confidence: '+f.confidence),
+      h('span',{class:'badge'},f.explanation_source==='model'?'explained by model':'deterministic explanation')),
+    h('p',{},f.explanation));
+  const evs=h('div',{});
+  for(const e of f.evidence||[]){
+    const val=e.ref&&e.ref.path?h('a',{onclick:()=>openFile(e.ref)},e.text):h('code',{},e.text);
+    evs.append(h('div',{class:'ev'},h('div',{class:'k'},e.label),val))}
+  box.append(evs);
+  if(f.patch){
+    box.append(h('h2',{style:'margin-top:16px'},'Suggested patch · not applied'),diffPre(f.patch),
+      h('div',{class:'row'},h('a',{href:`/api/runs/${r.id}/patch.diff`},h('button',{},'Download .diff')),
+        h('button',{onclick:e=>{navigator.clipboard&&navigator.clipboard.writeText(f.patch);e.target.textContent='Copied'}},'Copy')),
+      h('p',{class:'caveat'},'Traceback never edits your project. You decide whether to apply this.'));
+  }
+  for(const c of f.caveats||[])box.append(h('p',{class:'caveat'},'• '+c));
+  return box;
+}
+
+function diffPre(t){const p=h('pre');for(const l of t.split('\n')){p.append(h('span',{class:l.startsWith('+')&&!l.startsWith('+++')?'add':l.startsWith('-')&&!l.startsWith('---')?'del':''},l+'\n'))}return p}
+
+function candidatesCard(r){
+  const t=h('table',{},h('tr',{},h('th',{},'Suspect change'),h('th',{},'Link'),h('th',{},'Undo + replay')));
+  for(const c of r.candidates){
+    const res=!c.tested?h('span',{class:'det'},'not tested'):h('span',{class:'pill '+(c.passed?'y':'n')},c.passed?'PASSES':'still fails');
+    t.append(h('tr',{},h('td',{},c.title,h('div',{class:'det'},c.path?c.path+(c.line?':'+c.line:''):'')),h('td',{},String(c.score)),h('td',{},res)))}
+  return h('section',{class:'card'},h('h2',{},'Suspects · each undone alone and replayed'),t,
+    h('p',{class:'caveat'},'A hypothesis counts as confirmed only when undoing it makes the checks pass in a fresh sandbox.'));
+}
+
+function sandboxCard(s,m){
+  const kv=h('div',{class:'kv'});
+  const add=(k,v)=>kv.append(h('span',{},k),h('span',{},String(v)));
+  add('driver',s.driver);add('network',s.limits.network);add('timeout',s.limits.timeout_s+'s');add('memory',s.limits.mem_mb+' MB');
+  add('sandboxes run',s.runs);add('all destroyed',s.all_workspaces_destroyed?'yes':'NO');add('blocked actions',s.violations_total);
+  if(m)add('model',m.used?'used (Vultr Serverless Inference)':'not used (deterministic)');
+  return h('section',{class:'card'},h('h2',{},'Sandbox'),kv);
+}
+
+function containmentCard(r){
+  const box=h('section',{class:'card verdict '+r.verdict});
+  box.append(h('div',{class:'vt'},'Containment demo'),h('div',{class:'vh'},r.verdict==='contained'?'Blocked · logged · sandbox reset':'Containment FAILED'));
+  const kv=h('div',{class:'kv'});
+  for(const[k,v]of Object.entries(r.checks))kv.append(h('span',{},k.replace(/_/g,' ')),h('span',{class:v?'add':'del'},v?'yes':'NO'));
+  box.append(kv,h('h2',{style:'margin-top:16px'},'Blocked actions'));
+  const t=h('table',{},h('tr',{},h('th',{},'Event'),h('th',{},'Target')));
+  for(const v of r.violations)t.append(h('tr',{},h('td',{},v.event),h('td',{},v.target)));
+  box.append(t);return box;
+}
+function outputCard(r){return h('section',{class:'card'},h('h2',{},'What the hostile script printed'),h('pre',{},r.script_output.stdout+(r.script_output.stderr||'')))}
+
+async function openFile(ref){
+  const jid=current;const r=await fetch(`/api/runs/${jid}/file?side=${ref.side}&path=${encodeURIComponent(ref.path)}`);
+  if(!r.ok)return;const j=await r.json();
+  $('#vtitle').textContent=`${ref.side.toUpperCase()} · ${ref.path}`+(ref.line?` · line ${ref.line}`:'');
+  const body=$('#vbody');body.replaceChildren();
+  (j.lines||[]).forEach((l,i)=>{body.append(h('span',{class:i+1===ref.line?'hl':'',style:'display:block'},h('span',{class:'ln'},String(i+1)),l))});
+  if(j.binary)body.textContent='(binary file)';
+  $('#viewer').showModal();
+  const hl=body.querySelector('.hl');if(hl)hl.scrollIntoView({block:'center'});
+}
+$('#vclose').onclick=()=>$('#viewer').close();
+</script>
+</body>
+</html>
